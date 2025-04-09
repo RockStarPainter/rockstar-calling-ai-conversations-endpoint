@@ -138,7 +138,9 @@ export default async function handler(req, res) {
       from: emailFrom,
       to: emailTo,
       subject: `Rockstar AI Recent Interaction Recording - ${new Date().toLocaleString()}`,
-      text: `Call Duration: ${callDuration} seconds\n` +
+      text: `CALL SUMMARY:\n${transcriptSummary}\n\n` +
+            `Call Duration: ${callDuration} seconds\n` +
+            `Conversation ID: ${conversationId}\n\n` +
             `${transcriptText}`,
       attachments: [
         {
