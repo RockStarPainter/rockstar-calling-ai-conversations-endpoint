@@ -125,7 +125,7 @@ export default async function handler(req, res) {
     let transporter = nodemailer.createTransport({
       host: smtpHost,
       port: 465,
-      secure: parseInt(smtpPort) === 465, 
+      secure: true, 
       requireTLS: true,
       auth: {
         user: smtpUser,
