@@ -102,19 +102,41 @@ export default async function handler(req, res) {
     const arrayBuffer = await response.arrayBuffer();
     const audioBuffer = Buffer.from(arrayBuffer);
 
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = process.env.SMTP_PORT;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const emailFrom = process.env.EMAIL_FROM;
+    const emailTo = process.env.EMAIL_TO;
+  
+    if (
+      !smtpHost ||
+      !smtpPort ||
+      !smtpUser ||
+      !smtpPass ||
+      !emailFrom ||
+      !emailTo
+    ) {
+      return res
+        .status(500)
+        .json({ error: "Server configuration is incomplete" });
+    }
+  
+    let transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: parseInt(smtpPort, 10),
+      secure: true, 
       auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        user: smtpUser,
+        pass: smtpPass,
       },
     });
 
     const callDuration = payload.data?.metadata?.call_duration_secs || "N/A";
     
     const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: process.env.EMAIL_USER,
+      from: emailFrom,
+      to: emailTo,
       subject: `Rockstar AI Recent Interaction Recording - ${new Date().toLocaleString()}`,
       text: `Call Duration: ${callDuration} seconds\n` +
             `${transcriptText}`,
