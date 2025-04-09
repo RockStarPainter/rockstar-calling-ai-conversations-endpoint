@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     }
     
     const timestamp = timestampPart.substring(2);
-    const signature = signaturePart;  
+    const signature = signaturePart.substring(3);  // Extract just the hash without "v0="
 
     const reqTimestamp = parseInt(timestamp) * 1000;
     const tolerance = Date.now() - 30 * 60 * 1000; 
@@ -53,7 +53,7 @@ export default async function handler(req, res) {
       .update(message)
       .digest('hex');
     
-    const expectedSignature = `v0=${digest}`;
+    const expectedSignature = digest;
     console.log("Expected signature:", expectedSignature);
     console.log("Received signature:", signature);
 
@@ -94,6 +94,7 @@ export default async function handler(req, res) {
     });
 
     if (!response.ok) {
+      console.error("Failed to fetch audio:", await response.text());
       return res
         .status(200) 
         .json({ message: "Processed with errors", error: "Failed to fetch audio" });
@@ -117,40 +118,71 @@ export default async function handler(req, res) {
       !emailFrom ||
       !emailTo
     ) {
+      console.error("Missing SMTP configuration:", { 
+        hasHost: !!smtpHost, 
+        hasPort: !!smtpPort, 
+        hasUser: !!smtpUser,
+        hasPass: !!smtpPass,
+        hasFrom: !!emailFrom,
+        hasTo: !!emailTo
+      });
       return res
         .status(500)
         .json({ error: "Server configuration is incomplete" });
     }
   
-    let transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: parseInt(smtpPort, 10),
-      secure: true, 
-      auth: {
-        user: smtpUser,
-        pass: smtpPass,
-      },
-    });
-
-    const callDuration = payload.data?.metadata?.call_duration_secs || "N/A";
-    
-    const mailOptions = {
-      from: emailFrom,
-      to: emailTo,
-      subject: `Rockstar AI Recent Interaction Recording - ${new Date().toLocaleString()}`,
-      text: `Call Duration: ${callDuration} seconds\n` +
-            `${transcriptText}`,
-      attachments: [
-        {
-          filename: `conversation-${conversationId}.mp3`,
-          content: audioBuffer,
+    try {
+      let transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: parseInt(smtpPort, 10),
+        secure: parseInt(smtpPort, 10) === 465, // Auto-determine based on port
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
         },
-      ],
-    };
+      });
+      
+      // Verify SMTP connection configuration
+      await new Promise((resolve, reject) => {
+        transporter.verify(function(error, success) {
+          if (error) {
+            console.error("SMTP verification failed:", error);
+            reject(error);
+          } else {
+            console.log("SMTP server is ready to take our messages");
+            resolve(success);
+          }
+        });
+      });
 
-    await transporter.sendMail(mailOptions);
+      const callDuration = payload.data?.metadata?.call_duration_secs || "N/A";
+      
+      const mailOptions = {
+        from: emailFrom,
+        to: emailTo,
+        subject: `Rockstar AI Recent Interaction Recording - ${new Date().toLocaleString()}`,
+        text: `Call Duration: ${callDuration} seconds\n` +
+              `${transcriptText}`,
+        attachments: [
+          {
+            filename: `conversation-${conversationId}.mp3`,
+            content: audioBuffer,
+          },
+        ],
+      };
 
-    return res.status(200).json({ message: "Webhook processed successfully" });
+      console.log("Attempting to send email...");
+      const info = await transporter.sendMail(mailOptions);
+      console.log("Email sent successfully:", info.response);
+
+      return res.status(200).json({ message: "Webhook processed successfully" });
+    } catch (emailError) {
+      console.error("Email sending failed:", emailError);
+      return res.status(200).json({ 
+        message: "Processed with errors", 
+        error: `Email error: ${emailError.message}` 
+      });
+    }
   } catch (error) {
     console.error("Error processing webhook:", error);
     return res.status(200).json({ message: "Processed with errors", error: error.message });
